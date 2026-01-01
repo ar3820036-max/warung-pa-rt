@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Warung Pak RT - Modern</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif;}
+body,html{width:100%;height:100%;background:#f5f5f5;}
+header{width:100%;background:#ff3d00;color:white;text-align:center;padding:20px 0;font-size:24px;font-weight:bold;}
+.container{width:100%;max-width:1200px;margin:auto;padding:10px;}
+.search-box{margin:15px 0;}
+.search-box input{width:100%;padding:10px;border-radius:5px;border:1px solid #ccc;}
+.products{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;}
+@media(max-width:900px){.products{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:600px){.products{grid-template-columns:repeat(2,1fr);}}
+.product-card{background:white;border-radius:10px;padding:10px;display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+.product-card img{width:100%;height:160px;object-fit:cover;border-radius:10px;}
+.product-card h3{margin:10px 0 5px;font-size:16px;text-align:center;}
+.product-card p{margin:0;color:#ff3d00;font-weight:bold;font-size:15px;}
+.qty-box{display:flex;gap:5px;margin-top:10px;}
+.qty-box button{padding:5px 10px;background:#ff3d00;color:white;border:none;border-radius:5px;font-weight:bold;cursor:pointer;}
+.qty-box input.qty{width:50px;padding:5px;text-align:center;border:1px solid #ccc;border-radius:5px;}
+form{width:100%;background:white;padding:20px;margin-top:15px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+form input[type="text"]{width:100%;padding:10px;margin:5px 0;border-radius:5px;border:1px solid #ccc;}
+form button{width:100%;background:#ff3d00;color:white;border:none;padding:12px;font-size:16px;border-radius:5px;margin-top:10px;cursor:pointer;}
+.order-summary{margin-top:15px;background:#fff;padding:15px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+.order-summary h4{margin-bottom:10px;}
+.order-summary ul{list-style:none;}
+.order-summary li{padding:5px 0;border-bottom:1px solid #eee;}
+.total{margin-top:10px;font-weight:bold;font-size:16px;text-align:right;}
+</style>
+</head>
+<body>
+
+<header>Warung Pak RT</header>
+
+<div class="container">
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="Cari produk...">
+  </div>
+
+  <div class="products" id="productsContainer"></div>
+
+  <form id="orderForm">
+    <input type="text" id="name" placeholder="Nama Anda" required>
+    <input type="text" id="address" placeholder="Alamat Lengkap" required>
+
+    <div class="order-summary" id="orderSummary">
+      <h4>Barang yang Dipesan:</h4>
+      <ul id="summaryList"></ul>
+    </div>
+
+    <div class="total">Total Harga: Rp <span id="totalPrice">0</span></div>
+    <button type="submit">Kirim Pesanan</button>
+  </form>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAfKkS6BdYNCxRwGh2hP2uCY7dCeLpSpV4",
+  authDomain: "warung-e2545.firebaseapp.com",
+  databaseURL: "https://warung-e2545-default-rtdb.firebaseio.com",
+  projectId: "warung-e2545",
+  storageBucket: "warung-e2545.appspot.com",
+  messagingSenderId: "576198130336",
+  appId: "1:576198130336:web:e868110e69e00c5d2c67c5",
+  measurementId: "G-THNYNWCT44"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// Tambahkan qty di setiap produk
+const products = [
+  {id:"prod1", name:"Mie Goreng Sedap", price:12000, image:"https://i.imgur.com/5OZp4Jr.jpg", qty:0},
+  {id:"prod2", name:"Minyak Goreng", price:25000, image:"https://i.imgur.com/Y3xE4Kk.jpg", qty:0},
+  {id:"prod3", name:"Kopi Instan", price:15000, image:"https://i.imgur.com/d3h3T0r.jpg", qty:0},
+  {id:"prod4", name:"Teh Celup", price:10000, image:"https://i.imgur.com/LMYzqS3.jpg", qty:0},
+  {id:"prod5", name:"Sikat Gigi", price:5000, image:"https://i.imgur.com/3KcRZ8Z.jpg", qty:0},
+  {id:"prod6", name:"Sabun Mandi", price:8000, image:"https://i.imgur.com/Fq1sQ2M.jpg", qty:0}
+];
+
+const productsContainer = document.getElementById("productsContainer");
+const totalPriceEl = document.getElementById("totalPrice");
+const summaryList = document.getElementById("summaryList");
+
+function renderProducts(list){
+  productsContainer.innerHTML="";
+  list.forEach(product=>{
+    const card=document.createElement("div");
+    card.className="product-card";
+    card.dataset.id=product.id;
+    card.dataset.price=product.price;
+    card.innerHTML=`
+      <img src="${product.image}" alt="${product.name}">
+      <h3>${product.name}</h3>
+      <p>Rp ${product.price}</p>
+      <div class="qty-box">
+        <button class="decrease">-</button>
+        <input type="number" class="qty" min="0" value="${product.qty}">
+        <button class="increase">+</button>
+      </div>
+    `;
+    productsContainer.appendChild(card);
+
+    const qtyInput = card.querySelector(".qty");
+    // update qty di objek
+    const updateQty = ()=>{ 
+      product.qty = parseInt(qtyInput.value)||0;
+      updateTotal();
+    };
+    card.querySelector(".increase").addEventListener("click", ()=>{
+      qtyInput.value = parseInt(qtyInput.value)+1;
+      updateQty();
+    });
+    card.querySelector(".decrease").addEventListener("click", ()=>{
+      qtyInput.value = Math.max(0,parseInt(qtyInput.value)-1);
+      updateQty();
+    });
+    qtyInput.addEventListener("input", updateQty);
+  });
+}
+
+function updateTotal(){
+  let total=0;
+  summaryList.innerHTML="";
+  products.forEach(product=>{
+    if(product.qty>0){
+      total+=product.qty*product.price;
+      const li=document.createElement("li");
+      li.textContent=`${product.name} x${product.qty} = Rp ${product.qty*product.price}`;
+      summaryList.appendChild(li);
+    }
+  });
+  totalPriceEl.textContent = total;
+}
+
+// Search
+document.getElementById("searchInput").addEventListener("input",(e)=>{
+  const search=e.target.value.toLowerCase();
+  const filtered=products.filter(p=>p.name.toLowerCase().includes(search));
+  renderProducts(filtered);
+  updateTotal();
+});
+
+// Submit Order
+document.getElementById("orderForm").addEventListener("submit",(e)=>{
+  e.preventDefault();
+  const nama=document.getElementById("name").value;
+  const alamat=document.getElementById("address").value;
+  const barang = products.filter(p=>p.qty>0).map(p=>({
+    nama_barang: p.name,
+    harga: p.price,
+    jumlah: p.qty,
+    subtotal: p.price*p.qty
+  }));
+  if(barang.length===0){alert("Pilih minimal 1 produk!"); return;}
+  const total_harga = barang.reduce((sum,p)=>sum+p.subtotal,0);
+  const pesanan = {nama, alamat, barang, total_harga};
+
+  db.ref("pesanan").push(pesanan)
+    .then(()=>{
+      alert("Pesanan terkirim!");
+      document.getElementById("orderForm").reset();
+      // reset qty semua produk
+      products.forEach(p=>p.qty=0);
+      renderProducts(products);
+      updateTotal();
+    })
+    .catch(err=>alert("Terjadi kesalahan: "+err.message));
+});
+
+// Init
+renderProducts(products);
+</script>
+
+</body>
+</html>
